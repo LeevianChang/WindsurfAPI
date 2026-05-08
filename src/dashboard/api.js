@@ -1131,10 +1131,12 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
     stopLanguageServer();
     setTimeout(async () => {
       try {
+        const restartProxy = getProxyConfig().global || null;
         await startLanguageServer({
           binaryPath: config.lsBinaryPath,
           port: config.lsPort,
           apiServerUrl: config.codeiumApiUrl,
+          proxy: restartProxy,
         });
       } catch (e) {
         log.error(`Language server restart failed: ${e.message}`);

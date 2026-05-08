@@ -4,6 +4,7 @@ import { initAuth, isAuthenticated, saveAccountsSync } from './auth.js';
 import { startLanguageServer, waitForReady, isLanguageServerRunning, stopLanguageServer, cleanupOrphanLanguageServers } from './langserver.js';
 import { startServer } from './server.js';
 import { config, log } from './config.js';
+import { getProxyConfig } from './dashboard/proxy-config.js';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { execSync } from 'child_process';
@@ -104,14 +105,16 @@ async function main() {
       } catch (e) { log.warn(`LS cleanup error (non-fatal): ${e.message}`); }
     }
 
+    const startupProxy = getProxyConfig().global || null;
     await startLanguageServer({
       binaryPath,
       port: config.lsPort,
       apiServerUrl: config.codeiumApiUrl,
+      proxy: startupProxy,
     });
 
     try {
-      await waitForReady(15000);
+      if (!startupProxy) await waitForReady(15000);
     } catch (err) {
       log.error(`Language server failed to start: ${err.message}`);
       log.error('Chat completions will not work without the language server.');

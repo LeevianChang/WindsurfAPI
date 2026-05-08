@@ -491,7 +491,7 @@ export function getCsrfToken() {
 export async function startLanguageServer(opts = {}) {
   _binaryPath = opts.binaryPath || process.env.LS_BINARY_PATH || _binaryPath;
   _apiServerUrl = opts.apiServerUrl || process.env.CODEIUM_API_URL || _apiServerUrl;
-  const def = await ensureLs(null);
+  const def = await ensureLs(opts.proxy || null);
   return { port: def.port, csrfToken: def.csrfToken };
 }
 
