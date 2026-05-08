@@ -112,6 +112,21 @@ docker compose logs -f
 
 如果想改持久化目录，可在 `.env` 里设置 `DATA_DIR`。Docker 默认已设为 `/data`。
 
+使用自己的 GHCR 镜像：推送 `v*` tag 到 `LeevianChang/WindsurfAPI` 后，`.github/workflows/release.yml` 会构建并发布到 `ghcr.io/leevianchang/windsurf-api`。部署时在 `.env` 设置：
+
+```bash
+WINDSURF_API_IMAGE=ghcr.io/leevianchang/windsurf-api:2.0.93
+docker compose pull windsurf-api
+docker compose up -d --force-recreate windsurf-api
+```
+
+发版示例：
+
+```bash
+git tag v2.0.93
+git push origin v2.0.93
+```
+
 ### 一键更新
 
 部署过之后要拉最新修复，一条命令搞定：

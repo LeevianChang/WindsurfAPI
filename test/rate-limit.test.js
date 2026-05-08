@@ -15,6 +15,7 @@ import { getExperimental, setExperimental } from '../src/runtime-config.js';
 
 const createdAccountIds = [];
 const originalExperimental = getExperimental();
+const originalAutoDisableRateLimited = process.env.AUTO_DISABLE_RATE_LIMITED;
 
 function addTestAccount(label = 'test-account') {
   const account = addAccountByKey(`test-key-${Date.now()}-${Math.random().toString(36).slice(2)}`, label);
@@ -24,6 +25,8 @@ function addTestAccount(label = 'test-account') {
 
 afterEach(() => {
   setExperimental(originalExperimental);
+  if (originalAutoDisableRateLimited == null) delete process.env.AUTO_DISABLE_RATE_LIMITED;
+  else process.env.AUTO_DISABLE_RATE_LIMITED = originalAutoDisableRateLimited;
   while (createdAccountIds.length) {
     removeAccount(createdAccountIds.pop());
   }
@@ -97,6 +100,16 @@ describe('rate-limit handling', () => {
 
     assert.ok(until >= now + 1000, `expected near-real expiry, got ${until - now}ms`);
     assert.ok(until <= now + 2500, `expected short cooldown, got ${until - now}ms`);
+  });
+
+  it('optionally auto-disables accounts when they hit a rate limit', () => {
+    const account = addTestAccount('auto-disable-rate-limited');
+    process.env.AUTO_DISABLE_RATE_LIMITED = '1';
+
+    markRateLimited(account.apiKey, 1200, 'gemini-2.5-flash');
+
+    const listed = getAccountList().find(a => a.id === account.id);
+    assert.equal(listed.status, 'disabled');
   });
 
   it('returns 429 when every eligible account is locally RPM-exhausted', async () => {

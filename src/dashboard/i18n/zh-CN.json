@@ -767,6 +767,10 @@
     "resetErrors": "错误已重置",
     "tierSet": "层级已设为 {{tier}}",
     "editModels": "编辑可用模型",
+    "rateLimit": {
+      "title": "模型限流",
+      "global": "全局"
+    },
     "probe": {
       "doing": "探测中，约需 10-30 秒...",
       "complete": "探测完成：{{result}}",

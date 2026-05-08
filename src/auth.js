@@ -825,6 +825,11 @@ export function markRateLimited(apiKey, durationMs = 5 * 60 * 1000, modelKey = n
     account.rateLimitedUntil = Math.max(account.rateLimitedUntil || 0, until);
     log.warn(`Account ${account.id} (${account.email}) rate-limited (all models) for ${Math.round(safeMs / 60000)} min`);
   }
+  if (process.env.AUTO_DISABLE_RATE_LIMITED === '1' && account.status === 'active') {
+    account.status = 'disabled';
+    log.warn(`Account ${account.id} (${account.email}) auto-disabled after rate limit; re-enable manually from dashboard`);
+  }
+  saveAccounts();
 }
 
 export function refundReservation(apiKey, timestamp) {

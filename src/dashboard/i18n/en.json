@@ -767,6 +767,10 @@
     "resetErrors": "Errors reset",
     "tierSet": "Tier set to {{tier}}",
     "editModels": "Edit available models",
+    "rateLimit": {
+      "title": "Model rate limits",
+      "global": "Global"
+    },
     "probe": {
       "doing": "Probing, takes about 10-30 seconds...",
       "complete": "Probe complete: {{result}}",

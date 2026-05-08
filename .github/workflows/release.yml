@@ -33,9 +33,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # github.repository (= dwgx/WindsurfAPI) lowercases to "windsurfapi"
-          # without the hyphen the package.json npm name uses. Hardcode the
-          # kebab form so the image name stays "windsurf-api".
+          # Publish to the current repository owner's GHCR namespace, so forks
+          # and private mirrors build their own image instead of dwgx's image.
           images: ghcr.io/${{ github.repository_owner }}/windsurf-api
           tags: |
             # Only tag as latest for stable releases (no pre-release suffix like -rc, -alpha, -beta)
