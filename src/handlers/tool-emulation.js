@@ -778,6 +778,23 @@ const GLM47_ARG_KEY_CLOSE = '</arg_key>';
 const GLM47_ARG_VALUE_OPEN = '<arg_value>';
 const GLM47_ARG_VALUE_CLOSE = '</arg_value>';
 
+function findBareJsonToolStart(buffer) {
+  if (typeof buffer !== 'string' || !buffer) return -1;
+  const m = /\{\s*"name"\s*:/.exec(buffer);
+  return m ? m.index : -1;
+}
+
+function possibleBareJsonToolPrefixStart(buffer) {
+  if (typeof buffer !== 'string' || !buffer) return -1;
+  const start = buffer.lastIndexOf('{');
+  if (start === -1) return -1;
+  const tail = buffer.slice(start);
+  // Hold only suffixes that can still become `{\s*"name"\s*:` once the next
+  // chunk arrives. This catches pretty-printed tool JSON without buffering
+  // arbitrary prose that merely contains braces.
+  return /^\{\s*(?:"(?:n(?:a(?:m(?:e"?\s*:?)?)?)?)?)?$/.test(tail) ? start : -1;
+}
+
 function parseGlm47ToolCallBody(body) {
   if (typeof body !== 'string') return null;
   const raw = body.trim();
@@ -1027,6 +1044,10 @@ export class ToolCallStreamParser {
         const idx = this.buffer.indexOf(s);
         if (idx !== -1 && (earliest === -1 || idx < earliest)) earliest = idx;
       }
+      if (this.parseBareJson) {
+        const bareIdx = findBareJsonToolStart(this.buffer);
+        if (bareIdx !== -1 && (earliest === -1 || bareIdx < earliest)) earliest = bareIdx;
+      }
       if (earliest === -1) {
         let holdLen = 0;
         for (const s of sentinels) {
@@ -1037,6 +1058,10 @@ export class ToolCallStreamParser {
               break;
             }
           }
+        }
+        if (this.parseBareJson) {
+          const barePrefixStart = possibleBareJsonToolPrefixStart(this.buffer);
+          if (barePrefixStart !== -1) holdLen = Math.max(holdLen, this.buffer.length - barePrefixStart);
         }
         const emitUpto = this.buffer.length - holdLen;
         if (emitUpto > 0) {
@@ -1142,7 +1167,7 @@ export class ToolCallStreamParser {
       const tcIdx = (mode === 'auto' || mode === 'xml') ? this.buffer.indexOf(TC_OPEN) : -1;
       const trIdx = this.buffer.indexOf(TR_PREFIX);
       const tcCodeIdx = this.parseToolCode && (mode === 'auto' || mode === 'tool_code') ? this.buffer.indexOf(TC_CODE) : -1;
-      const tcBareIdx = this.parseBareJson && (mode === 'auto' || mode === 'json') ? this.buffer.indexOf(TC_BARE) : -1;
+      const tcBareIdx = this.parseBareJson && (mode === 'auto' || mode === 'json') ? findBareJsonToolStart(this.buffer) : -1;
 
       let nextIdx = -1;
       let tagType = null;
@@ -1170,6 +1195,10 @@ export class ToolCallStreamParser {
               break;
             }
           }
+        }
+        if (this.parseBareJson) {
+          const barePrefixStart = possibleBareJsonToolPrefixStart(this.buffer);
+          if (barePrefixStart !== -1) holdLen = Math.max(holdLen, this.buffer.length - barePrefixStart);
         }
         const emitUpto = this.buffer.length - holdLen;
         if (emitUpto > 0) pushText(this.buffer.slice(0, emitUpto));

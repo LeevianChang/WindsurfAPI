@@ -39,6 +39,18 @@ describe('ToolCallStreamParser', () => {
     assert.equal(allCalls[0].name, 'Write');
   });
 
+  it('parses pretty-printed bare JSON tool calls without leaking stream text', () => {
+    const parser = new ToolCallStreamParser();
+    const r1 = parser.feed('Thinking...\n{\n  "na');
+    const r2 = parser.feed('me": "question",\n  "arguments": {"questions": []}\n}');
+    const flush = parser.flush();
+    const allCalls = [...r1.toolCalls, ...r2.toolCalls, ...flush.toolCalls];
+    assert.equal(r1.text, 'Thinking...\n');
+    assert.equal(r2.text + flush.text, '');
+    assert.equal(allCalls.length, 1);
+    assert.equal(allCalls[0].name, 'question');
+  });
+
   it('can leave bare JSON untouched when stripping non-emulated Cascade markup', () => {
     const json = '{"name":"not_a_tool","arguments":{"message":"plain response"}}';
     assert.equal(stripToolMarkupFromText(json), json);
