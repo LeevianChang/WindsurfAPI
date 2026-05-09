@@ -736,6 +736,8 @@
       "result": "Result"
     },
     "none": "None (use global)",
+    "accountScope": "Per-account proxy",
+    "globalScope": "Global proxy",
     "direct": "Direct",
     "global": "Global",
     "current": "Current",

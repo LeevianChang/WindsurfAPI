@@ -736,6 +736,8 @@
       "result": "结果"
     },
     "none": "无（使用全局）",
+    "accountScope": "账号独立代理",
+    "globalScope": "全局代理",
     "direct": "直连",
     "global": "全局",
     "current": "当前",

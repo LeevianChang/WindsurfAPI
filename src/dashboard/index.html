@@ -502,6 +502,24 @@ tbody tr:hover td { background: var(--surface-2); }
   padding: 32px 16px;
   font-style: italic;
 }
+.cell-ellipsis {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.account-label-cell { max-width: 132px; }
+.account-proxy-cell { max-width: 150px; }
+.account-proxy-cell code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 
 /* ─── Account detail panel (expand-in-row) ──────────── */
 .expand-chevron {
@@ -1835,7 +1853,7 @@ window._firebaseOAuth = async function(provider) {
       <div class="section-body tight">
         <div class="table-wrap">
           <table id="accounts-table">
-            <thead><tr><th data-i18n="table.header.id">ID</th><th data-i18n="table.header.label">标签</th><th data-i18n="table.header.tier">层级</th><th data-i18n="table.header.rpm">RPM</th><th class="th-help" data-i18n="table.header.credits" data-i18n-title="creditsBar.columnTooltip" title="配额使用情况&#10;&#10;日 — 每日高级请求剩余百分比（重置频繁）&#10;周 — 每周高级请求剩余百分比（Trial 账号重点看这条）&#10;&#10;数值越高 = 剩余越多 = 越安全&#10;悬停单条进度条可查看重置时间">余额</th><th data-i18n="table.header.models">可用模型</th><th data-i18n="table.header.status">状态</th><th data-i18n="table.header.error">错误</th><th data-i18n="table.header.lastUsed">最后使用</th><th data-i18n="table.header.key">Key</th><th data-i18n="table.header.action">操作</th></tr></thead>
+            <thead><tr><th data-i18n="table.header.id">ID</th><th data-i18n="table.header.label">标签</th><th data-i18n="table.header.tier">层级</th><th data-i18n="table.header.proxy">代理</th><th data-i18n="table.header.rpm">RPM</th><th class="th-help" data-i18n="table.header.credits" data-i18n-title="creditsBar.columnTooltip" title="配额使用情况&#10;&#10;日 — 每日高级请求剩余百分比（重置频繁）&#10;周 — 每周高级请求剩余百分比（Trial 账号重点看这条）&#10;&#10;数值越高 = 剩余越多 = 越安全&#10;悬停单条进度条可查看重置时间">余额</th><th data-i18n="table.header.models">可用模型</th><th data-i18n="table.header.status">状态</th><th data-i18n="table.header.error">错误</th><th data-i18n="table.header.lastUsed">最后使用</th><th data-i18n="table.header.key">Key</th><th data-i18n="table.header.action">操作</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -3405,9 +3423,10 @@ docker compose up -d --force-recreate</pre>
     // v2.0.57 Fix 5 — refresh drought banner alongside accounts so a low
     // pool state shows up the moment the user opens the panel.
     this.loadDrought();
-    const [d, ov] = await Promise.all([
+    const [d, ov, proxyCfg] = await Promise.all([
       this.api('GET', '/accounts'),
       this.api('GET', '/overview').catch(() => null),
+      this.api('GET', '/proxy').catch(() => ({})),
     ]);
     const instances = ov?.langServer?.instances || [];
     const poolCard = document.getElementById('ls-pool-card');
@@ -3442,6 +3461,19 @@ docker compose up -d --force-recreate</pre>
     }
     const tbody = document.querySelector('#accounts-table tbody');
     const tierLabel = { pro: 'PRO', free: 'FREE', expired: I18n.t('tier.expiredLabel'), unknown: I18n.t('tier.unknown') };
+    const perAccountProxy = proxyCfg?.perAccount || {};
+    const globalProxy = proxyCfg?.global || null;
+    const renderProxyCell = (a) => {
+      const p = perAccountProxy[a.id] || globalProxy;
+      if (!p) return `<span class="text-xs text-dim">${I18n.t('proxy.none')}</span>`;
+      const scope = perAccountProxy[a.id] ? I18n.t('proxy.accountScope') : I18n.t('proxy.globalScope');
+      const auth = p.username ? `${this.esc(p.username)}@` : '';
+      const proxyText = `${this.esc(p.type || 'http')}://${auth}${this.esc(p.host || '')}:${this.esc(String(p.port || ''))}`;
+      return `<div class="account-proxy-cell">
+        <div><code title="${proxyText}">${proxyText}</code></div>
+        <div class="text-xs text-dim" style="margin-top:3px">${scope}</div>
+      </div>`;
+    };
     tbody.innerHTML = (d.accounts || []).map(a => {
       const tier = a.tier || 'unknown';
       // GetUserStatus snapshot — authoritative plan/trial/credit info (may be null)
@@ -3557,13 +3589,14 @@ docker compose up -d --force-recreate</pre>
           <button class="expand-chevron ${isExpanded ? 'open' : ''}" onclick="App.toggleAccountDetail('${this.escJsAttr(a.id)}')" title="${I18n.t('account.detail.toggle')}">▸</button>
           <code>${a.id}</code>
         </td>
-        <td>${this.esc(a.email)}</td>
+        <td><span class="cell-ellipsis account-label-cell" title="${this.esc(a.email)}">${this.esc(a.email)}</span></td>
         <td>
           <div style="display:flex;flex-direction:column;gap:2px">
             <span class="tier ${this.esc(tier)}" style="cursor:pointer" title="${this.esc(tierTooltip)}" onclick="App.overrideTier('${this.escJsAttr(a.id)}','${this.escJsAttr(tier)}')">${tierLabel[tier] || this.esc(tier)}${a.tierManual ? ' ✎' : ''}</span>
             ${tierSubline ? `<span class="text-xs text-dim" style="font-size:10px">${this.esc(tierSubline)}</span>` : ''}
           </div>
         </td>
+        <td>${renderProxyCell(a)}</td>
         <td>${rpmCell}</td>
         <td>${creditCell}</td>
         <td>${capsHtml}</td>
@@ -3587,8 +3620,8 @@ docker compose up -d --force-recreate</pre>
             <button class="btn btn-ghost btn-xs" style="color:var(--error)" onclick="App.deleteAccount('${this.escJsAttr(a.id)}')">${I18n.t('action.delete')}</button>
           </div>
         </td>
-      </tr>${isExpanded ? `<tr class="account-detail-row"><td colspan="11">${this.renderAccountDetail(a)}</td></tr>` : ''}`;
-    }).join('') || `<tr class="empty-row"><td colspan="11">${I18n.t('table.empty.accounts')}</td></tr>`;
+      </tr>${isExpanded ? `<tr class="account-detail-row"><td colspan="12">${this.renderAccountDetail(a)}</td></tr>` : ''}`;
+    }).join('') || `<tr class="empty-row"><td colspan="12">${I18n.t('table.empty.accounts')}</td></tr>`;
   },
 
   _expandedAccounts: new Set(),
