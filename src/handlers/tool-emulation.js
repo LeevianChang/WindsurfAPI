@@ -1249,7 +1249,30 @@ export class ToolCallStreamParser {
     this.buffer = '';
     if (this.inToolCall) {
       this.inToolCall = false;
-      return { text: `<tool_call>${remaining}`, toolCalls: [] };
+      const body = remaining.trim();
+      const parsed = safeParseJson(body);
+      if (parsed && typeof parsed.name === 'string') {
+        const args = parsed.arguments;
+        const argsJson = typeof args === 'string' ? args : JSON.stringify(args ?? {});
+        log.info(`ToolParser: recovered unterminated xml tool_call at stream flush, name=${parsed.name}`);
+        this._totalSeen++;
+        return {
+          text: '',
+          toolCalls: [{
+            id: `call_${this._totalSeen - 1}_${Date.now().toString(36)}`,
+            name: parsed.name,
+            argumentsJson: argsJson,
+          }],
+        };
+      }
+      const salvaged = salvageToolCallsFromText(body);
+      if (salvaged.toolCalls.length) {
+        log.info(`ToolParser: salvage recovered ${salvaged.toolCalls.length} unterminated xml tool_call(s) at stream flush`);
+        this._totalSeen += salvaged.toolCalls.length;
+        return { text: '', toolCalls: salvaged.toolCalls };
+      }
+      log.warn('ToolCallStreamParser: dropping unterminated <tool_call> block at stream flush');
+      return { text: '', toolCalls: [] };
     }
     if (this.inToolResult) {
       this.inToolResult = false;

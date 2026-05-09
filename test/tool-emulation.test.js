@@ -70,6 +70,25 @@ describe('ToolCallStreamParser', () => {
     assert.equal(allCalls[0].name, 'Read');
   });
 
+  it('recovers unterminated XML tool calls at stream flush', () => {
+    const parser = new ToolCallStreamParser();
+    const r1 = parser.feed('Need input: <tool_call>{"name":"question","arguments":{"questions":[]}}');
+    const r2 = parser.flush();
+    const allCalls = [...r1.toolCalls, ...r2.toolCalls];
+    assert.equal(r1.text, 'Need input: ');
+    assert.equal(r2.text, '');
+    assert.equal(allCalls.length, 1);
+    assert.equal(allCalls[0].name, 'question');
+  });
+
+  it('drops malformed unterminated XML tool calls instead of leaking markup', () => {
+    const parser = new ToolCallStreamParser();
+    const r1 = parser.feed('<tool_call>{"name":');
+    const r2 = parser.flush();
+    assert.equal(r1.text + r2.text, '');
+    assert.equal(r1.toolCalls.length + r2.toolCalls.length, 0);
+  });
+
   it('handles GLM47 call split across chunks', () => {
     const parser = new ToolCallStreamParser({ modelKey: 'glm-5.1' });
     const r1 = parser.feed('<tool_call>Read<arg_key>file_path</arg_key>');
