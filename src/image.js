@@ -9,6 +9,9 @@ const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_BASE64_LEN = Math.ceil(MAX_SIZE * 4 / 3) + 100;
 const MAX_REDIRECTS = 3;
 const MIME_OK = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const TEXT_MIME_RE = /^(text\/|application\/(json|xml|javascript|x-javascript|typescript|x-typescript|yaml|x-yaml|toml|csv|rtf|sql|x-sh|x-shellscript|x-python|x-httpd-php|x-ruby|x-perl|x-lua|x-csharp|java|x-java-source|x-c\+\+src|x-csrc|x-go|x-rust|octet-stream)\b)/i;
+const TEXT_EXT_RE = /\.(txt|md|markdown|json|jsonl|xml|html?|css|js|jsx|mjs|cjs|ts|tsx|py|java|c|cc|cpp|cxx|h|hpp|cs|go|rs|rb|php|swift|kt|kts|scala|sh|bash|zsh|fish|ps1|bat|cmd|sql|csv|tsv|yaml|yml|toml|ini|conf|config|env|log|rtf)$/i;
+const PDF_EXT_RE = /\.pdf$/i;
 // http/https `lookup` hook: runs in place of the default DNS resolution.
 // Rejecting here means the request never opens a socket to the internal
 // address, closing the DNS-rebinding gap in the string-based host check.
@@ -51,6 +54,62 @@ export function parseGenericDataUrl(url) {
   if (!m) return null;
   if (m[2].length > MAX_BASE64_LEN) throw new Error(`Data URL exceeds ${MAX_SIZE} byte limit`);
   return { base64_data: m[2], mime_type: m[1].toLowerCase() };
+}
+
+function looksTextLike(buf) {
+  if (!buf.length) return true;
+  const sample = buf.subarray(0, Math.min(buf.length, 4096));
+  let suspicious = 0;
+  for (const b of sample) {
+    if (b === 0) return false;
+    if (b < 0x09 || (b > 0x0d && b < 0x20)) suspicious++;
+  }
+  return suspicious / sample.length < 0.02;
+}
+
+function decodeTextFile(g, filename = '') {
+  const mime = String(g?.mime_type || '').toLowerCase();
+  const name = String(filename || '');
+  if (!TEXT_MIME_RE.test(mime) && !TEXT_EXT_RE.test(name)) return null;
+  const buf = Buffer.from(g.base64_data, 'base64');
+  if (buf.length > MAX_SIZE || !looksTextLike(buf)) return null;
+  let body = buf.toString('utf8');
+  if (body.charCodeAt(0) === 0xfeff) body = body.slice(1);
+  return body.replace(/\r\n/g, '\n');
+}
+
+function appendPdfText(text, dataUrl, { filename = '', source = 'file block' } = {}) {
+  const g = parseGenericDataUrl(dataUrl);
+  if (!g?.base64_data) return text;
+  const pdf = tryExtractPdf(g.base64_data);
+  const label = filename ? ` "${filename}"` : '';
+  if (pdf?.text) {
+    log.info(`PDF extracted (${source}): ${pdf.pageCount} pages, ${pdf.text.length} chars`);
+    return text + `\n[PDF Document${label} — ${pdf.pageCount} page(s)]\n${pdf.text}\n`;
+  }
+  return text + `\n[PDF Document${label} — no extractable text (scanned/image-only PDF)]\n`;
+}
+
+function isPdfDataUrl(dataUrl, filename = '') {
+  if (String(dataUrl || '').slice(0, 40).toLowerCase().startsWith('data:application/pdf')) return true;
+  if (!PDF_EXT_RE.test(String(filename || ''))) return false;
+  const g = parseGenericDataUrl(dataUrl);
+  if (!g?.base64_data) return false;
+  const header = Buffer.from(g.base64_data.slice(0, 16), 'base64').subarray(0, 5).toString('latin1');
+  return header === '%PDF-';
+}
+
+function appendTextFile(text, dataUrl, filename = '') {
+  const g = parseGenericDataUrl(dataUrl);
+  if (!g?.base64_data) return { text, appended: false };
+  const decoded = decodeTextFile(g, filename);
+  if (decoded == null) return { text, appended: false };
+  const label = filename ? ` "${filename}"` : '';
+  log.info(`Text file extracted${filename ? ` (${filename})` : ''}: ${decoded.length} chars`);
+  return {
+    text: text + `\n[File${label} — ${g.mime_type}]\n${decoded}\n`,
+    appended: true,
+  };
 }
 
 export async function assertPublicUrlHost(urlOrHost, lookupFn = dnsLookup) {
@@ -149,16 +208,7 @@ export async function extractImages(contentBlocks) {
           // rather than treating it as an unsupported image type.
           const lower = url.slice(0, 40).toLowerCase();
           if (lower.startsWith('data:application/pdf')) {
-            const g = parseGenericDataUrl(url);
-            if (g?.base64_data) {
-              const pdf = tryExtractPdf(g.base64_data);
-              if (pdf?.text) {
-                text += `\n[PDF Document — ${pdf.pageCount} page(s)]\n${pdf.text}\n`;
-                log.info(`PDF extracted (image_url data URL): ${pdf.pageCount} pages, ${pdf.text.length} chars`);
-              } else {
-                text += '\n[PDF Document — no extractable text (scanned/image-only PDF)]\n';
-              }
-            }
+            text = appendPdfText(text, url, { source: 'image_url data URL' });
             continue;
           }
           const parsed = parseDataUrl(url);
@@ -170,22 +220,15 @@ export async function extractImages(contentBlocks) {
     } else if (block.type === 'file' || block.type === 'input_file') {
       // OpenAI PDF input: { type:'file', file:{ filename, file_data:'data:application/pdf;base64,...' } }
       // or file_id (uploaded via Files API — we can't fetch, so ignore).
-      const file = block.file || {};
-      const dataUrl = file.file_data || file.url || '';
-      if (dataUrl.startsWith('data:application/pdf')) {
-        const g = parseGenericDataUrl(dataUrl);
-        if (g?.base64_data) {
-          const pdf = tryExtractPdf(g.base64_data);
-          if (pdf?.text) {
-            const label = file.filename ? ` "${file.filename}"` : '';
-            text += `\n[PDF Document${label} — ${pdf.pageCount} page(s)]\n${pdf.text}\n`;
-            log.info(`PDF extracted (OpenAI file block): ${pdf.pageCount} pages, ${pdf.text.length} chars`);
-          } else {
-            text += '\n[PDF Document — no extractable text (scanned/image-only PDF)]\n';
-          }
-        }
+      const file = block.file || block.input_file || block;
+      const dataUrl = file.file_data || file.data || file.url || '';
+      const filename = file.filename || file.name || block.filename || block.name || '';
+      if (isPdfDataUrl(dataUrl, filename)) {
+        text = appendPdfText(text, dataUrl, { filename, source: 'OpenAI file block' });
       } else if (dataUrl && !file.file_id) {
-        log.warn(`Unsupported file block data URL: ${dataUrl.slice(0, 40)}...`);
+        const result = appendTextFile(text, dataUrl, filename);
+        text = result.text;
+        if (!result.appended) log.warn(`Unsupported file block data URL: ${dataUrl.slice(0, 40)}...`);
       } else if (file.file_id) {
         log.warn(`File block references file_id=${file.file_id} — upload API not supported, skipping`);
       }
