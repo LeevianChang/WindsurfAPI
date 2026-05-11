@@ -57,6 +57,11 @@
  * ═══════════════════════════════════════════════════════════
  */
 
+function cascadeMaxOutputTokens() {
+  const configured = parseInt(process.env.CASCADE_MAX_OUTPUT_TOKENS || '', 10);
+  return Number.isFinite(configured) && configured > 0 ? configured : 8192;
+}
+
 import { randomUUID } from 'crypto';
 import {
   writeVarintField, writeStringField, writeMessageField, writeBytesField,
@@ -564,9 +569,10 @@ function buildCascadeConfig(modelEnum, modelUid, { toolPreamble, forceDefault, n
     throw new Error('buildCascadeConfig: at least one of modelUid or modelEnum must be provided');
   }
 
-  // max_output_tokens (field 6) — real IDE sends 16384/32768.
-  // Missing this causes truncated long responses.
-  plannerParts.push(writeVarintField(6, 32768));
+  // max_output_tokens (field 6). Use a conservative default for API proxy
+  // workloads: long Cascade generations commonly hit upstream read deadlines
+  // before the client receives a clean finish. Operators can raise this via env.
+  plannerParts.push(writeVarintField(6, cascadeMaxOutputTokens()));
 
   // code_changes_section (field 11) — suppress IDE-specific "apply changes" boilerplate
   if (!toolPreamble) {

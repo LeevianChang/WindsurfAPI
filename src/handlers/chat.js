@@ -1003,8 +1003,8 @@ export function applyToolPreambleBudget(tools, toolChoice, callerEnv = '', opts 
   const modelKey = opts.modelKey || null;
   const provider = opts.provider || null;
   const route = opts.route || null;
-  const softBytes = opts.softBytes ?? parseInt(process.env.TOOL_PREAMBLE_SOFT_BYTES || '24000', 10);
-  const hardBytes = opts.hardBytes ?? parseInt(process.env.TOOL_PREAMBLE_HARD_BYTES || '48000', 10);
+  const softBytes = opts.softBytes ?? parseInt(process.env.TOOL_PREAMBLE_SOFT_BYTES || '16000', 10);
+  const hardBytes = opts.hardBytes ?? parseInt(process.env.TOOL_PREAMBLE_HARD_BYTES || '32000', 10);
   const tiers = [
     { tier: 'full', build: buildToolPreambleForProto },
     { tier: 'schema-compact', build: buildSchemaCompactToolPreambleForProto },

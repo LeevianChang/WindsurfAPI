@@ -169,10 +169,11 @@ function positiveIntEnv(name, fallback) {
 }
 
 function cascadeHistoryBudget(modelUid) {
-  // Default 400KB — long conversations (100+ turns with tool results)
-  // easily hit the old 200KB limit, causing silent context amputation.
-  // Still configurable via env for memory-constrained hosts.
-  const normal = positiveIntEnv('CASCADE_MAX_HISTORY_BYTES', 400_000);
+  // Default 300KB — enough for long tool-heavy conversations while keeping
+  // fresh replay payloads below the panel-state timeout cliff seen in heavy
+  // OpenClaw/Cline/opencode requests. Operators can raise this if context
+  // retention matters more than timeout risk.
+  const normal = positiveIntEnv('CASCADE_MAX_HISTORY_BYTES', 300_000);
   if (/\b1m\b|[-_]1m$/i.test(String(modelUid || ''))) {
     return positiveIntEnv('CASCADE_1M_HISTORY_BYTES', 900_000);
   }
