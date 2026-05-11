@@ -90,6 +90,10 @@ function upstreamTransientErrorMessage(model, triedCount, reason = 'internal_err
   return `${model} 上游 Windsurf Cascade 服务瞬态故障：已在 ${triedCount} 个账号上重试都收到 ${detail}。这是上游或本地语言服务器会话的瞬时问题，建议 30-60 秒后重试；若连续出现，请重启语言服务器。`;
 }
 
+function stopAfterRateLimitDisable() {
+  return process.env.AUTO_DISABLE_RATE_LIMITED === '1';
+}
+
 export function isUpstreamTransientError(err, isInternal = false) {
   return !!err && (isInternal || err.kind === 'transient_stall' || isCascadeTransportError(err));
 }
@@ -1912,6 +1916,14 @@ async function _handleChatCompletionsInner(body, context = {}) {
           if (Number.isFinite(rl.retryAfterMs) && rl.retryAfterMs > 0) {
             markRateLimited(acct.apiKey, rl.retryAfterMs, routingModelKey);
           }
+          if (stopAfterRateLimitDisable()) {
+            lastErr = {
+              status: 429,
+              headers: { 'Retry-After': String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)) },
+              body: { error: { message: `${displayModel} 当前账号已达速率限制，请稍后重试`, type: 'rate_limit_exceeded', retry_after_ms: rl.retryAfterMs || 60_000 } },
+            };
+            break;
+          }
           if (!reuseEntryDead && strictReuse && checkedOutReuseEntry && fpBefore && checkedOutReuseEntry.apiKey === acct.apiKey) {
             const availability = getAccountAvailability(acct.apiKey, routingModelKey);
             const retryAfterMs = strictReuseRetryMs(availability);
@@ -1992,6 +2004,10 @@ async function _handleChatCompletionsInner(body, context = {}) {
     // Rate limit: this account is done for this model, try the next one
     if (errType === 'rate_limit_exceeded') {
       recordRateLimited();
+      if (stopAfterRateLimitDisable()) {
+        log.warn(`Account ${acct.email} rate-limited on ${displayModel}; AUTO_DISABLE_RATE_LIMITED=1 so not trying other accounts on this proxy`);
+        return result;
+      }
       // v2.0.91 — IP-level circuit breaker: when Windsurf upstream
       // rate-limits several accounts for the same model in a tight
       // window, it's usually IP-wide cooldown, not per-account.
@@ -2940,6 +2956,13 @@ function streamResponse(id, created, model, modelKey, provider, messages, cascad
                 if (Number.isFinite(rl.retryAfterMs) && rl.retryAfterMs > 0) {
                   markRateLimited(acct.apiKey, rl.retryAfterMs, modelKey);
                 }
+                if (stopAfterRateLimitDisable()) {
+                  lastErr = Object.assign(
+                    new Error(`${model} 当前账号已达速率限制，请稍后重试`),
+                    { type: 'rate_limit_exceeded', retry_after_ms: rl.retryAfterMs || 60_000 }
+                  );
+                  break;
+                }
                 if (!reuseEntryDead && strictReuse && checkedOutReuseEntry && fpBefore && checkedOutReuseEntry.apiKey === acct.apiKey) {
                   const availability = getAccountAvailability(acct.apiKey, modelKey);
                   const retryAfterMs = strictReuseRetryMs(availability);
@@ -3217,6 +3240,11 @@ function streamResponse(id, created, model, modelKey, provider, messages, cascad
             const isPolicyBlocked = /cyber\s*verification|content[\s_-]+policy|policy[\s_-]+(?:violation|blocked|denied)|safety[\s_-]+(?:policy|blocked)|prompt[\s_-]+(?:rejected|blocked)\s+by[\s_-]+policy|usage[\s_-]+policy[\s_-]+violation/i.test(err.message);
             if (isAuthFail) reportError(currentApiKey);
             if (isRateLimit) { recordRateLimited(); markRateLimited(currentApiKey, rateLimitCooldownMs(err.message), modelKey); err.isRateLimit = true; err.isModelError = true; err.kind ||= 'model_error'; }
+            if (isRateLimit && stopAfterRateLimitDisable()) {
+              log.warn(`Account ${acct.email} rate-limited on ${model}; AUTO_DISABLE_RATE_LIMITED=1 so not trying other accounts on this proxy`);
+              lastErr = err;
+              break;
+            }
             // v2.0.91 — IP-level rate limit circuit breaker (stream path).
             // Same logic as non-stream: ≥3 accounts rate-limited for the
             // same model within 8s → Windsurf is doing IP-wide cooldown,

@@ -1851,9 +1851,30 @@ window._firebaseOAuth = async function(provider) {
         </div>
       </div>
       <div class="section-body tight">
+        <div class="field-row" style="padding:14px 16px;border-bottom:1px solid var(--border);align-items:flex-end">
+          <div class="field" style="max-width:180px">
+            <label class="field-label">状态筛选</label>
+            <select id="account-status-filter" class="select" onchange="App.updateAccountFilters()">
+              <option value="all">全部账号</option>
+              <option value="disabled">仅 disabled</option>
+              <option value="not-disabled">非 disabled</option>
+            </select>
+          </div>
+          <div class="field" style="max-width:280px">
+            <label class="field-label">代理筛选</label>
+            <select id="account-proxy-filter" class="select" onchange="App.updateAccountFilters()">
+              <option value="all">全部代理</option>
+            </select>
+          </div>
+          <label class="field-label" style="display:flex;align-items:center;gap:8px;margin-bottom:9px;cursor:pointer">
+            <input id="account-show-keys" type="checkbox" onchange="App.updateAccountFilters()">
+            显示 Key 列
+          </label>
+          <div id="account-filter-summary" class="text-sm text-muted" style="margin:0 0 9px auto"></div>
+        </div>
         <div class="table-wrap">
           <table id="accounts-table">
-            <thead><tr><th data-i18n="table.header.id">ID</th><th data-i18n="table.header.label">标签</th><th data-i18n="table.header.tier">层级</th><th data-i18n="table.header.proxy">代理</th><th data-i18n="table.header.rpm">RPM</th><th class="th-help" data-i18n="table.header.credits" data-i18n-title="creditsBar.columnTooltip" title="配额使用情况&#10;&#10;日 — 每日高级请求剩余百分比（重置频繁）&#10;周 — 每周高级请求剩余百分比（Trial 账号重点看这条）&#10;&#10;数值越高 = 剩余越多 = 越安全&#10;悬停单条进度条可查看重置时间">余额</th><th data-i18n="table.header.models">可用模型</th><th data-i18n="table.header.status">状态</th><th data-i18n="table.header.error">错误</th><th data-i18n="table.header.lastUsed">最后使用</th><th data-i18n="table.header.key">Key</th><th data-i18n="table.header.action">操作</th></tr></thead>
+            <thead><tr><th data-i18n="table.header.id">ID</th><th data-i18n="table.header.label">标签</th><th data-i18n="table.header.tier">层级</th><th data-i18n="table.header.proxy">代理</th><th data-i18n="table.header.rpm">RPM</th><th class="th-help" data-i18n="table.header.credits" data-i18n-title="creditsBar.columnTooltip" title="配额使用情况&#10;&#10;日 — 每日高级请求剩余百分比（重置频繁）&#10;周 — 每周高级请求剩余百分比（Trial 账号重点看这条）&#10;&#10;数值越高 = 剩余越多 = 越安全&#10;悬停单条进度条可查看重置时间">余额</th><th data-i18n="table.header.models">可用模型</th><th data-i18n="table.header.status">状态</th><th data-i18n="table.header.error">错误</th><th data-i18n="table.header.lastUsed">最后使用</th><th class="account-key-col" data-i18n="table.header.key">Key</th><th data-i18n="table.header.action">操作</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -2505,6 +2526,13 @@ const App = {
   allModels: [],
   modelAccessConfig: { mode: 'all', list: [] },
   loginHistory: JSON.parse(localStorage.getItem('wl_history') || '[]'),
+  accountFilters: {
+    status: localStorage.getItem('account_status_filter') || 'all',
+    proxy: localStorage.getItem('account_proxy_filter') || 'all',
+    showKeys: localStorage.getItem('account_show_keys') === '1',
+  },
+  accountListData: [],
+  accountProxyState: { perAccount: {}, global: null },
   _filterTimer: null,
 
   applyLang() {
@@ -3459,10 +3487,75 @@ docker compose up -d --force-recreate</pre>
         poolCard.innerHTML = '';
       }
     }
+    this.accountListData = d.accounts || [];
+    this.accountProxyState = { perAccount: proxyCfg?.perAccount || {}, global: proxyCfg?.global || null };
+    this.syncAccountFilterControls();
+    this.renderAccountsTable();
+  },
+
+  accountProxyKeyFor(a) {
+    const perAccountProxy = this.accountProxyState?.perAccount || {};
+    const globalProxy = this.accountProxyState?.global || null;
+    const p = perAccountProxy[a.id] || globalProxy;
+    if (!p) return 'none';
+    const scope = perAccountProxy[a.id] ? 'account' : 'global';
+    return `${scope}:${p.type || 'http'}://${p.host || ''}:${p.port || ''}`;
+  },
+
+  accountProxyLabelForKey(key) {
+    if (key === 'none') return I18n.t('proxy.none');
+    return key.replace(/^account:/, '账号 · ').replace(/^global:/, '全局 · ');
+  },
+
+  syncAccountFilterControls() {
+    const statusEl = document.getElementById('account-status-filter');
+    const proxyEl = document.getElementById('account-proxy-filter');
+    const keyEl = document.getElementById('account-show-keys');
+    if (statusEl) statusEl.value = this.accountFilters.status || 'all';
+    if (keyEl) keyEl.checked = !!this.accountFilters.showKeys;
+    if (proxyEl) {
+      const selected = this.accountFilters.proxy || 'all';
+      const keys = [...new Set((this.accountListData || []).map(a => this.accountProxyKeyFor(a)))].sort((a, b) => this.accountProxyLabelForKey(a).localeCompare(this.accountProxyLabelForKey(b)));
+      proxyEl.innerHTML = `<option value="all">全部代理</option>` + keys.map(k => `<option value="${this.esc(k)}">${this.esc(this.accountProxyLabelForKey(k))}</option>`).join('');
+      proxyEl.value = keys.includes(selected) ? selected : 'all';
+      this.accountFilters.proxy = proxyEl.value;
+    }
+  },
+
+  updateAccountFilters() {
+    this.accountFilters = {
+      status: document.getElementById('account-status-filter')?.value || 'all',
+      proxy: document.getElementById('account-proxy-filter')?.value || 'all',
+      showKeys: !!document.getElementById('account-show-keys')?.checked,
+    };
+    localStorage.setItem('account_status_filter', this.accountFilters.status);
+    localStorage.setItem('account_proxy_filter', this.accountFilters.proxy);
+    localStorage.setItem('account_show_keys', this.accountFilters.showKeys ? '1' : '0');
+    this.renderAccountsTable();
+  },
+
+  filteredAccounts() {
+    const filters = this.accountFilters || {};
+    return (this.accountListData || []).filter(a => {
+      if (filters.status === 'disabled' && a.status !== 'disabled') return false;
+      if (filters.status === 'not-disabled' && a.status === 'disabled') return false;
+      if (filters.proxy && filters.proxy !== 'all' && this.accountProxyKeyFor(a) !== filters.proxy) return false;
+      return true;
+    });
+  },
+
+  renderAccountsTable() {
     const tbody = document.querySelector('#accounts-table tbody');
+    if (!tbody) return;
+    const allAccounts = this.accountListData || [];
+    const accounts = this.filteredAccounts();
+    const showKeys = !!this.accountFilters?.showKeys;
+    document.querySelectorAll('#accounts-table .account-key-col').forEach(el => { el.style.display = showKeys ? '' : 'none'; });
+    const summary = document.getElementById('account-filter-summary');
+    if (summary) summary.textContent = `显示 ${accounts.length} / ${allAccounts.length}`;
     const tierLabel = { pro: 'PRO', free: 'FREE', expired: I18n.t('tier.expiredLabel'), unknown: I18n.t('tier.unknown') };
-    const perAccountProxy = proxyCfg?.perAccount || {};
-    const globalProxy = proxyCfg?.global || null;
+    const perAccountProxy = this.accountProxyState?.perAccount || {};
+    const globalProxy = this.accountProxyState?.global || null;
     const renderProxyCell = (a) => {
       const p = perAccountProxy[a.id] || globalProxy;
       if (!p) return `<span class="text-xs text-dim">${I18n.t('proxy.none')}</span>`;
@@ -3474,7 +3567,7 @@ docker compose up -d --force-recreate</pre>
         <div class="text-xs text-dim" style="margin-top:3px">${scope}</div>
       </div>`;
     };
-    tbody.innerHTML = (d.accounts || []).map(a => {
+    tbody.innerHTML = accounts.map(a => {
       const tier = a.tier || 'unknown';
       // GetUserStatus snapshot — authoritative plan/trial/credit info (may be null)
       const us = a.userStatus || null;
@@ -3606,7 +3699,7 @@ docker compose up -d --force-recreate</pre>
         </td>
         <td style="color:${a.errorCount > 0 ? 'var(--error)' : 'inherit'}">${a.errorCount}</td>
         <td class="text-sm nowrap">${a.lastUsed ? new Date(a.lastUsed).toLocaleString() : '-'}</td>
-        <td class="nowrap">
+        <td class="nowrap account-key-col" style="display:${showKeys ? '' : 'none'}">
           <code title="${I18n.t('action.revealKey')}" style="cursor:pointer" onclick="App.revealAndCopyKey('${this.escJsAttr(a.id)}')">${this.esc(a.apiKey_masked || a.keyPrefix || '')}</code>
         </td>
         <td class="nowrap">
