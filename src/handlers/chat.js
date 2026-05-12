@@ -542,12 +542,11 @@ const CASCADE_REUSE_ALLOW_SHARED_API_KEY = process.env.CASCADE_REUSE_ALLOW_SHARE
 function hasPerUserScope(callerKey) {
   if (typeof callerKey !== 'string' || !callerKey) return false;
   if (callerKey.includes(':user:')) return true;
-  // v2.0.37: apiKey-mode now appends `:client:<ip+ua>` when no body
-  // user signal is present, so single-user self-hosted setups land on
-  // a stable scope and cascade reuse works across turns. Match the
-  // segment anywhere in the string (#93 follow-up zhangzhang-bit).
-  if (callerKey.includes(':client:')) return true;
-  if (callerKey.startsWith('session:') || callerKey.startsWith('client:')) return true;
+  // Only explicit user/session signals are safe enough for Cascade reuse.
+  // IP/UA-based :client: fallbacks collapse all users behind gateways like
+  // new-api into one caller, so they must not unlock server-side trajectory
+  // reuse by default.
+  if (callerKey.startsWith('session:')) return true;
   return false;
 }
 
@@ -560,8 +559,8 @@ function isToolSensitiveOpusModel(modelKey = '') {
   return /^claude-opus-4(?:[.-]6|[.-]7)(?:[-.]|$)/i.test(String(modelKey || ''));
 }
 
-function isSonnet46ToolReuseDisabled() {
-  return process.env.WINDSURFAPI_DISABLE_SONNET_TOOL_REUSE === '1';
+function isSonnet46ToolReuseEnabled() {
+  return process.env.WINDSURFAPI_SONNET_TOOL_REUSE !== '0';
 }
 
 function isSonnet46Model(modelKey = '') {
@@ -570,7 +569,7 @@ function isSonnet46Model(modelKey = '') {
 
 export function isToolEmulatedReusableModel(modelKey = '') {
   if (isToolSensitiveOpusModel(modelKey)) return true;
-  return !isSonnet46ToolReuseDisabled() && isSonnet46Model(modelKey);
+  return isSonnet46ToolReuseEnabled() && isSonnet46Model(modelKey);
 }
 
 // Tool-emulated requests are normally kept out of cascade_id reuse because

@@ -93,11 +93,10 @@ export function callerKeyFromRequest(req, apiKey = '', body = null) {
 export function hasCallerScope(callerKey, req, body) {
   if (typeof callerKey === 'string') {
     if (callerKey.includes(':user:')) return true;
-    // Match :client: anywhere — apiKey-mode now appends `:client:<ip+ua>`
-    // as a fallback subkey when there's no body user signal, so the
-    // scope check has to look past the prefix.
-    if (callerKey.includes(':client:')) return true;
-    if (callerKey.startsWith('session:') || callerKey.startsWith('client:')) return true;
+    // IP/UA-derived :client: values are useful for cache partitioning, but
+    // are not a reliable user boundary behind API gateways/reverse proxies.
+    // Do not treat them as permission to reuse server-side Cascade state.
+    if (callerKey.startsWith('session:')) return true;
   }
   if (body && extractBodyCallerSubKey(body)) return true;
   if (req?.headers?.['x-dashboard-session'] || req?.headers?.['x-session-id']) return true;

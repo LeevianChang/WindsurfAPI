@@ -12,7 +12,7 @@
  */
 
 import http from 'http';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -92,6 +92,22 @@ function json(res, status, body) {
     'Cache-Control': 'no-store',
   });
   res.end(data);
+}
+
+function diagnosticUserHash(value) {
+  if (typeof value !== 'string' || !value) return '';
+  return createHash('sha256').update(value).digest('hex').slice(0, 12);
+}
+
+function logCallerIdentity(routeName, body, callerKey) {
+  const user = typeof body?.user === 'string' ? body.user : '';
+  const metadataUser = typeof body?.metadata?.user_id === 'string' ? body.metadata.user_id : '';
+  const source = user ? 'user' : (metadataUser ? 'metadata.user_id' : 'none');
+  const hash = diagnosticUserHash(user || metadataUser);
+  const scope = typeof callerKey === 'string' && callerKey.includes(':user:')
+    ? 'user'
+    : (typeof callerKey === 'string' && callerKey.includes(':client:') ? 'client' : 'none');
+  log.info(`CallerIdentity route=${routeName} source=${source}${hash ? ` hash=${hash}` : ''} scope=${scope}`);
 }
 
 async function route(req, res) {
@@ -334,7 +350,9 @@ async function route(req, res) {
     }
 
     const reqStartedAt = Date.now();
-    const result = await handleChatCompletions(body, { callerKey: callerKeyFromRequest(req, extractToken(req), body) });
+    const callerKey = callerKeyFromRequest(req, extractToken(req), body);
+    logCallerIdentity('chat', body, callerKey);
+    const result = await handleChatCompletions(body, { callerKey });
     const processingMs = Date.now() - reqStartedAt;
     const modelHeaders = {
       'x-request-id': 'req-' + randomUUID(),
@@ -384,7 +402,9 @@ async function route(req, res) {
     }
 
     const reqStartedAt = Date.now();
-    const result = await handleResponses(body, { context: { callerKey: callerKeyFromRequest(req, extractToken(req), body) } });
+    const callerKey = callerKeyFromRequest(req, extractToken(req), body);
+    logCallerIdentity('responses', body, callerKey);
+    const result = await handleResponses(body, { context: { callerKey } });
     const processingMs = Date.now() - reqStartedAt;
     const modelHeaders = {
       'x-request-id': 'req-' + randomUUID(),
@@ -418,7 +438,9 @@ async function route(req, res) {
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return json(res, 400, { type: 'error', error: { type: 'invalid_request_error', message: 'messages must be a non-empty array' } });
     }
-    const result = await handleMessages(body, { callerKey: callerKeyFromRequest(req, extractToken(req), body) });
+    const callerKey = callerKeyFromRequest(req, extractToken(req), body);
+    logCallerIdentity('messages', body, callerKey);
+    const result = await handleMessages(body, { callerKey });
     const anthropicHeaders = {
       'request-id': 'req-' + randomUUID(),
       'anthropic-model': body.model || '',

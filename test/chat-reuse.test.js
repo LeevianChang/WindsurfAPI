@@ -52,20 +52,34 @@ describe('shouldUseCascadeReuse', () => {
     assert.equal(shouldUseCascadeReuse({ useCascade: true, emulateTools: true, modelKey: 'claude-opus-4.5' }), false);
   });
 
-  it('allows tool-emulated reuse for Sonnet 4.6 thinking (#93)', () => {
+  it('allows Sonnet 4.6 tool-emulated reuse by default', () => {
     assert.equal(shouldUseCascadeReuse({ useCascade: true, emulateTools: true, modelKey: 'claude-sonnet-4-6-thinking' }), true);
   });
 
-  it('can disable Sonnet 4.6 tool reuse with WINDSURFAPI_DISABLE_SONNET_TOOL_REUSE=1', () => {
-    const previous = process.env.WINDSURFAPI_DISABLE_SONNET_TOOL_REUSE;
-    process.env.WINDSURFAPI_DISABLE_SONNET_TOOL_REUSE = '1';
+  it('keeps Sonnet 4.6 tool reuse enabled when explicitly enabled', () => {
+    const previous = process.env.WINDSURFAPI_SONNET_TOOL_REUSE;
+    process.env.WINDSURFAPI_SONNET_TOOL_REUSE = '1';
+    try {
+      assert.equal(shouldUseCascadeReuse({ useCascade: true, emulateTools: true, modelKey: 'claude-sonnet-4-6-thinking' }), true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.WINDSURFAPI_SONNET_TOOL_REUSE;
+      } else {
+        process.env.WINDSURFAPI_SONNET_TOOL_REUSE = previous;
+      }
+    }
+  });
+
+  it('can disable Sonnet 4.6 tool reuse with WINDSURFAPI_SONNET_TOOL_REUSE=0', () => {
+    const previous = process.env.WINDSURFAPI_SONNET_TOOL_REUSE;
+    process.env.WINDSURFAPI_SONNET_TOOL_REUSE = '0';
     try {
       assert.equal(shouldUseCascadeReuse({ useCascade: true, emulateTools: true, modelKey: 'claude-sonnet-4-6-thinking' }), false);
     } finally {
       if (previous === undefined) {
-        delete process.env.WINDSURFAPI_DISABLE_SONNET_TOOL_REUSE;
+        delete process.env.WINDSURFAPI_SONNET_TOOL_REUSE;
       } else {
-        process.env.WINDSURFAPI_DISABLE_SONNET_TOOL_REUSE = previous;
+        process.env.WINDSURFAPI_SONNET_TOOL_REUSE = previous;
       }
     }
   });

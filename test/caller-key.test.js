@@ -112,18 +112,18 @@ describe('hasCallerScope', () => {
     assert.equal(hasCallerScope('api:abc:user:xyz'), true);
   });
 
-  it('true for callerKey containing :client: anywhere (v2.0.37 fallback)', () => {
-    // apiKey-mode now appends `:client:<ip+ua-hash>` — scope check
-    // must recognize the segment anywhere, not just as a prefix.
-    assert.equal(hasCallerScope('api:abc:client:xyz'), true);
+  it('false for callerKey containing only :client: fallback', () => {
+    // IP/UA-derived client fingerprints are not a reliable user boundary
+    // behind gateways such as new-api, so they must not unlock Cascade reuse.
+    assert.equal(hasCallerScope('api:abc:client:xyz'), false);
   });
 
   it('true for session: prefix', () => {
     assert.equal(hasCallerScope('session:abc'), true);
   });
 
-  it('true for client: prefix', () => {
-    assert.equal(hasCallerScope('client:abc'), true);
+  it('false for client: prefix', () => {
+    assert.equal(hasCallerScope('client:abc'), false);
   });
 
   it('false for bare api: without any subkey', () => {
