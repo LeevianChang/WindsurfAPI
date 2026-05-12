@@ -223,6 +223,79 @@ export function detectFabricatedToolResult(text, { lastUserText = '' } = {}) {
   };
 }
 
+function isToolActionRequested(text = '') {
+  return /\b(?:run|exec|execute|cat|ls|pwd|echo|grep|find|read|open|view|search|list|inspect|check|invoke|call)\b/i.test(text)
+    || /\b(?:shell|bash|command|tool|function|file|directory|repo|repository|workspace|cwd)\b/i.test(text)
+    || /(?:运行|执行|读取|打开|查看|检查|搜索|查找|列出|目录|文件|项目|仓库|命令|工具)/.test(text);
+}
+
+/**
+ * Detect high-confidence cases where Cascade answered as if it had run a
+ * caller-side action even though no caller-visible tool_call was emitted.
+ * This is intentionally narrower than generic hallucination detection: it only
+ * fires when the latest user turn asked for live file/command/tool state and
+ * the answer claims an action/result that must have come from a tool.
+ */
+export function detectUnsupportedActionAnswer(text, { lastUserText = '', toolsExpected = false, noTools = false } = {}) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const userProvidedContext = /\b(?:pasted|provided|included|shared|given)\b[^\n]{0,80}\b(?:content|file|snippet|code)\b/i.test(lastUserText)
+    || /\bhere\s+is\s+(?:the\s+)?(?:file\s+content|file|content|code|snippet)\b/i.test(lastUserText)
+    || /(?:粘贴|贴出|提供|给出|上面)[^\n]{0,40}(?:内容|文件|代码)/.test(lastUserText);
+  if (userProvidedContext && /\b(?:pasted|provided|included|shared|given|above)\b/i.test(trimmed)) {
+    return null;
+  }
+  const askedForAction = isToolActionRequested(lastUserText);
+  if (!askedForAction) return null;
+
+  const fabricated = detectFabricatedToolResult(trimmed, { lastUserText });
+  if (fabricated) return fabricated;
+
+  const claimsAction = [
+    /\b(?:I(?:'ve| have)?|I)\s+(?:ran|executed|read|opened|viewed|inspected|checked|listed|grepped|searched)\b/i,
+    /\b(?:I can see|I found|I see that|the command output is|the output is|the file contains)\b/i,
+    /\b(?:based on|from)\s+(?:the|your)\s+(?:file|repository|repo|codebase|workspace|directory)\b/i,
+    /(?:我(?:已经)?(?:运行|执行|读取|打开|查看|检查|搜索|查找|列出)了|我看到了|我发现|命令输出|运行结果|文件内容是|根据(?:该|这个|你的)?(?:文件|项目|仓库|代码库))/, 
+  ].some(re => re.test(trimmed));
+  if (!claimsAction) return null;
+
+  if (toolsExpected) {
+    return {
+      reason: 'fabricated_tool_result',
+      hint: 'The model described a tool/file/command action but did not emit a tool_call. The answer was blocked because the result was not produced by a caller-visible tool execution.',
+      matchedPattern: 'action_claim_without_tool_call',
+      sample: trimmed.slice(0, 160),
+    };
+  }
+  if (noTools) {
+    return {
+      reason: 'unsupported_action_claim',
+      hint: 'No tools were available for this request, but the model claimed to inspect files, run commands, or use live workspace state. The answer was blocked to avoid fabricated project information.',
+      matchedPattern: 'action_claim_no_tools',
+      sample: trimmed.slice(0, 160),
+    };
+  }
+  return null;
+}
+
+function shouldRejectFabricatedAction() {
+  return process.env.WINDSURFAPI_FABRICATE_REJECT !== '0';
+}
+
+function fabricatedActionError(fab) {
+  return {
+    status: 525,
+    body: {
+      error: {
+        message: `Tool/action fabrication detected: ${fab.hint}`,
+        type: fab.reason || 'fabricated_tool_result',
+        sample: fab.sample,
+      },
+    },
+  };
+}
+
 /**
  * Extract a clean JSON payload from a model response. Handles three common
  * shapes a non-constrained-decoding model produces when asked for JSON:
@@ -2362,17 +2435,8 @@ async function nonStreamResponse(client, id, created, model, modelKey, messages,
             const fab = detectFabricatedToolResult(narrativeSource, { lastUserText: lastUser });
             if (fab) {
               log.warn(`Chat[non-stream]: fabricate detected — model=${modelKey} pattern=${fab.matchedPattern} sample="${fab.sample}"`);
-              if (process.env.WINDSURFAPI_FABRICATE_REJECT === '1') {
-                return {
-                  status: 502,
-                  body: {
-                    error: {
-                      message: `Tool-call fabrication detected: ${fab.hint}`,
-                      type: 'fabricated_tool_result',
-                      sample: fab.sample,
-                    },
-                  },
-                };
+              if (shouldRejectFabricatedAction()) {
+                return fabricatedActionError(fab);
               }
             }
           }
@@ -2419,6 +2483,19 @@ async function nonStreamResponse(client, id, created, model, modelKey, messages,
       log.info(`Chat[non-stream]: thinking-only response from non-reasoning model ${modelKey}; promoting ${allThinking.length}c thinking → content`);
       allText = allThinking;
       allThinking = '';
+    }
+
+    if (!toolCalls.length) {
+      const lastUser = latestRealUserText(messages) || '';
+      const actionFab = detectUnsupportedActionAnswer(allText || allThinking, {
+        lastUserText: lastUser,
+        toolsExpected: emulateTools || nativeBridgeOn,
+        noTools: !emulateTools && !nativeBridgeOn,
+      });
+      if (actionFab) {
+        log.warn(`Chat[non-stream]: action fabrication blocked — model=${modelKey} reason=${actionFab.reason} pattern=${actionFab.matchedPattern} sample="${actionFab.sample}"`);
+        if (shouldRejectFabricatedAction()) return fabricatedActionError(actionFab);
+      }
     }
 
     // Check the cascade back into the pool under the *post-turn* fingerprint
@@ -3131,6 +3208,7 @@ function streamResponse(id, created, model, modelKey, provider, messages, cascad
                   const fab = detectFabricatedToolResult(accNarrative, { lastUserText: lastUser });
                   if (fab) {
                     log.warn(`Chat[stream]: fabricate detected — model=${modelKey} pattern=${fab.matchedPattern} sample="${fab.sample}"`);
+                    if (shouldRejectFabricatedAction()) throw Object.assign(new Error(`Tool/action fabrication detected: ${fab.hint}`), { isFabrication: true, fab });
                   }
                 }
               }
@@ -3245,6 +3323,18 @@ function streamResponse(id, created, model, modelKey, provider, messages, cascad
                 choices: [{ index: 0, delta: { content: accThinking }, finish_reason: null }] });
               accText = accThinking;
               accThinking = '';
+            }
+            if (!collectedToolCalls.length) {
+              const lastUser = latestRealUserText(messages) || '';
+              const actionFab = detectUnsupportedActionAnswer(accText || accThinking, {
+                lastUserText: lastUser,
+                toolsExpected: emulateTools || nativeBridgeOn,
+                noTools: !emulateTools && !nativeBridgeOn,
+              });
+              if (actionFab) {
+                log.warn(`Chat[stream]: action fabrication blocked — model=${modelKey} reason=${actionFab.reason} pattern=${actionFab.matchedPattern} sample="${actionFab.sample}"`);
+                if (shouldRejectFabricatedAction()) throw Object.assign(new Error(`Tool/action fabrication detected: ${actionFab.hint}`), { isFabrication: true, fab: actionFab });
+              }
             }
             const finalReason = collectedToolCalls.length ? 'tool_calls' : 'stop';
             // OpenAI spec: the finish_reason chunk carries NO usage, then a

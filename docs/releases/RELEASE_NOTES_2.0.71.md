@@ -25,7 +25,7 @@ Pattern 库：
 - 裸 hex hash 32-64 位
 - 假 `total N` / `drwxr-xr-x` ls 输出
 
-两条 markers=none log 路径都接：non-stream + stream。检测到时 log warn + 提示 caller 用户。env `WINDSURFAPI_FABRICATE_REJECT=1` 启用真 502 拒绝模式（非默认；默认只 log warn 不阻断响应）。
+两条 markers=none log 路径都接：non-stream + stream。检测到时 log warn + 提示 caller 用户。当前默认启用真 525 拒绝模式；env `WINDSURFAPI_FABRICATE_REJECT=0` 可降级为只 log warn 不阻断响应。
 
 提示语固定指向 workaround：
 ```
@@ -123,7 +123,7 @@ docker compose pull && docker compose up -d --force-recreate
 ```
 
 可选 env：
-- `WINDSURFAPI_FABRICATE_REJECT=1` — fabricate 检测到时真 502 拒绝（非默认）
+- `WINDSURFAPI_FABRICATE_REJECT=0` — fabricate 检测到时只 log warn，不做 525 拒绝（默认会拒绝）
 - `WINDSURFAPI_LS_PER_PROXY_USER=0|1` — 强制关/开 sticky 分 LS
 
 ### 仍未真彻底解决但已尽全力
