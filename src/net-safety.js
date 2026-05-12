@@ -89,6 +89,7 @@ export function isPrivateIp(address) {
 export async function resolvePublicAddresses(hostname, lookupFn = dnsLookup) {
   const host = String(hostname || '').replace(/^\[|\]$/g, '');
   if (!host || host.toLowerCase() === 'localhost') throw new Error('ERR_PROXY_PRIVATE_HOST');
+  if (/\.invalid$/i.test(host)) throw new Error(`getaddrinfo ENOTFOUND ${host}`);
   if (net.isIP(host)) {
     if (isPrivateIp(host)) throw new Error('ERR_PROXY_PRIVATE_IP');
     return [{ address: host, family: net.isIP(host) }];
@@ -106,6 +107,7 @@ export async function resolvePublicAddresses(hostname, lookupFn = dnsLookup) {
 export async function validateHostFormat(hostname, lookupFn = dnsLookup) {
   const host = String(hostname || '').replace(/^\[|\]$/g, '');
   if (!host) throw new Error('ERR_INVALID_HOST');
+  if (/\.invalid$/i.test(host)) throw new Error(`getaddrinfo ENOTFOUND ${host}`);
   if (net.isIP(host)) {
     return [{ address: host, family: net.isIP(host) }];
   }
@@ -114,4 +116,3 @@ export async function validateHostFormat(hostname, lookupFn = dnsLookup) {
   });
   return Array.isArray(result) ? result : [result];
 }
-

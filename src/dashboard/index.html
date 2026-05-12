@@ -144,7 +144,7 @@ code {
   flex: 1;
   padding: 28px 36px 40px;
   min-height: 100vh;
-  max-width: 1400px;
+  /* max-width: 1400px; — auto-width for long email rows, prevent action columns from squeezing */
 }
 .page-header {
   display: flex;
@@ -518,6 +518,204 @@ tbody tr:hover td { background: var(--surface-2); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* ─── Account detail panel (expand-in-row) ──────────── */
+.expand-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all .15s ease;
+  font-size: 10px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.expand-chevron:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.expand-chevron.open {
+  color: var(--accent);
+  transform: rotate(90deg);
+}
+.account-detail-row > td {
+  padding: 0 !important;
+  background: #0d0d10 !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.account-detail-wrap {
+  padding: 20px 28px;
+  background: linear-gradient(180deg, rgba(99,102,241,.04), transparent 80%);
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+@media (max-width: 1100px) { .detail-grid { grid-template-columns: 1fr; } }
+.detail-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.detail-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 10px;
+}
+.detail-card-head .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+.detail-kv {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 4px 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.detail-kv > .k { color: var(--text-dim); }
+.detail-kv > .v { color: var(--text); font-variant-numeric: tabular-nums; }
+.detail-kv code { font-size: 11px; padding: 1px 5px; }
+
+.detail-bar {
+  display: grid;
+  grid-template-columns: 60px 1fr 50px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.detail-bar .bar-label { color: var(--text-dim); font-size: 11px; }
+.detail-bar .bar-track {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.detail-bar .bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .6s cubic-bezier(.2,.8,.2,1);
+}
+.detail-bar .bar-pct {
+  text-align: right;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.detail-bar .bar-reset {
+  grid-column: 2 / 4;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+
+/* Model list grouped by provider */
+.model-list-card { grid-column: 1 / -1; }
+.model-group {
+  margin-bottom: 14px;
+}
+.model-group:last-child { margin-bottom: 0; }
+.model-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed var(--border);
+}
+.model-group-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: .02em;
+}
+.model-group-count {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+.model-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px;
+}
+.model-chip {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11.5px;
+  transition: all .15s ease;
+}
+.model-chip:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+.model-chip.blocked {
+  opacity: .45;
+  text-decoration: line-through;
+  text-decoration-color: var(--text-dim);
+  text-decoration-thickness: 1px;
+}
+.model-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.model-chip.blocked .model-chip-dot { background: var(--error); }
+.model-chip-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-chip-cost {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--warn);
+  padding: 1px 6px;
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.2);
+  border-radius: 10px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.provider-swatch {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-right: 6px;
   vertical-align: middle;
 }
 
@@ -1853,22 +2051,22 @@ window._firebaseOAuth = async function(provider) {
       <div class="section-body tight">
         <div class="field-row" style="padding:14px 16px;border-bottom:1px solid var(--border);align-items:flex-end">
           <div class="field" style="max-width:180px">
-            <label class="field-label">状态筛选</label>
+            <label class="field-label" data-i18n="account.filter.status">Status Filter</label>
             <select id="account-status-filter" class="select" onchange="App.updateAccountFilters()">
-              <option value="all">全部账号</option>
-              <option value="disabled">仅 disabled</option>
-              <option value="not-disabled">非 disabled</option>
+              <option value="all" data-i18n="account.filter.allAccounts">All Accounts</option>
+              <option value="disabled" data-i18n="account.filter.disabledOnly">Disabled Only</option>
+              <option value="not-disabled" data-i18n="account.filter.notDisabled">Not Disabled</option>
             </select>
           </div>
           <div class="field" style="max-width:280px">
-            <label class="field-label">代理筛选</label>
+            <label class="field-label" data-i18n="account.filter.proxy">Proxy Filter</label>
             <select id="account-proxy-filter" class="select" onchange="App.updateAccountFilters()">
-              <option value="all">全部代理</option>
+              <option value="all" data-i18n="account.filter.allProxies">All Proxies</option>
             </select>
           </div>
           <label class="field-label" style="display:flex;align-items:center;gap:8px;margin-bottom:9px;cursor:pointer">
             <input id="account-show-keys" type="checkbox" onchange="App.updateAccountFilters()">
-            显示 Key 列
+            <span data-i18n="account.filter.showKeyColumn">Show Key Column</span>
           </label>
           <div id="account-filter-summary" class="text-sm text-muted" style="margin:0 0 9px auto"></div>
         </div>
@@ -3504,7 +3702,7 @@ docker compose up -d --force-recreate</pre>
 
   accountProxyLabelForKey(key) {
     if (key === 'none') return I18n.t('proxy.none');
-    return key.replace(/^account:/, '账号 · ').replace(/^global:/, '全局 · ');
+    return key.replace(/^account:/, `${I18n.t('proxy.accountScope')} · `).replace(/^global:/, `${I18n.t('proxy.globalScope')} · `);
   },
 
   syncAccountFilterControls() {
@@ -3516,7 +3714,7 @@ docker compose up -d --force-recreate</pre>
     if (proxyEl) {
       const selected = this.accountFilters.proxy || 'all';
       const keys = [...new Set((this.accountListData || []).map(a => this.accountProxyKeyFor(a)))].sort((a, b) => this.accountProxyLabelForKey(a).localeCompare(this.accountProxyLabelForKey(b)));
-      proxyEl.innerHTML = `<option value="all">全部代理</option>` + keys.map(k => `<option value="${this.esc(k)}">${this.esc(this.accountProxyLabelForKey(k))}</option>`).join('');
+      proxyEl.innerHTML = `<option value="all">${this.esc(I18n.t('account.filter.allProxies'))}</option>` + keys.map(k => `<option value="${this.esc(k)}">${this.esc(this.accountProxyLabelForKey(k))}</option>`).join('');
       proxyEl.value = keys.includes(selected) ? selected : 'all';
       this.accountFilters.proxy = proxyEl.value;
     }
@@ -3552,7 +3750,7 @@ docker compose up -d --force-recreate</pre>
     const showKeys = !!this.accountFilters?.showKeys;
     document.querySelectorAll('#accounts-table .account-key-col').forEach(el => { el.style.display = showKeys ? '' : 'none'; });
     const summary = document.getElementById('account-filter-summary');
-    if (summary) summary.textContent = `显示 ${accounts.length} / ${allAccounts.length}`;
+    if (summary) summary.textContent = I18n.t('account.filter.summary').replace('{{shown}}', accounts.length).replace('{{total}}', allAccounts.length);
     const tierLabel = { pro: 'PRO', free: 'FREE', expired: I18n.t('tier.expiredLabel'), unknown: I18n.t('tier.unknown') };
     const perAccountProxy = this.accountProxyState?.perAccount || {};
     const globalProxy = this.accountProxyState?.global || null;

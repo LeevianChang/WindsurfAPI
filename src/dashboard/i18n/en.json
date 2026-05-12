@@ -792,6 +792,16 @@
     "ls": {
       "restarting": "Language Server restarting..."
     },
+    "filter": {
+      "status": "Status Filter",
+      "allAccounts": "All Accounts",
+      "disabledOnly": "Disabled Only",
+      "notDisabled": "Not Disabled",
+      "proxy": "Proxy Filter",
+      "allProxies": "All Proxies",
+      "showKeyColumn": "Show Key Column",
+      "summary": "Showing {{shown}} / {{total}}"
+    },
     "detail": {
       "toggle": "Expand / collapse details",
       "ago": "ago",

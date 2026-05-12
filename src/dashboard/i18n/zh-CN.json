@@ -792,6 +792,16 @@
     "ls": {
       "restarting": "Language Server 重启中..."
     },
+    "filter": {
+      "status": "状态筛选",
+      "allAccounts": "全部账号",
+      "disabledOnly": "仅 disabled",
+      "notDisabled": "非 disabled",
+      "proxy": "代理筛选",
+      "allProxies": "全部代理",
+      "showKeyColumn": "显示 Key 列",
+      "summary": "显示 {{shown}} / {{total}}"
+    },
     "detail": {
       "toggle": "展开/收起详情",
       "ago": "前",
